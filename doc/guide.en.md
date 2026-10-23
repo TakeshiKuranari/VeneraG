@@ -13,6 +13,7 @@ This document covers the setup steps and controls for each feature. If a setting
   - [Adjusting results](#adjusting-results)
   - [Performance and usage](#performance-and-usage)
   - [Things to know](#things-to-know)
+- [WebDAV comic libraries](#webdav-comic-libraries)
 - [Comic cache directory](#comic-cache-directory)
 - [Collections](#collections)
   - [Creating](#creating)
@@ -187,6 +188,17 @@ Two things must stay in the prompt or the feature stops working. First, ask the 
 - Marked experimental: recognition and translation can both fail, most visibly on long text and unusual layouts.
 - The Japanese model is large because vertical manga text currently has only one reliable recognition option.
 - Inference is CPU-only, so pre-translating on mobile causes noticeable heat and battery drain. Run it while charging.
+
+<!--anchor:webdav-library-->
+## WebDAV comic libraries
+
+Set the remote path to a directory whose immediate subdirectories are comics, such as the sync tool's `comics/<source_key>/`. The app reads `title`, comma-separated `author`, and flat string-array `tags` from each comic's `metadata.json`, plus `description` when present. Missing or invalid metadata falls back to the directory name; chapters and images continue to follow the actual directory layout.
+
+Metadata is indexed in the background and cached on this device for **7 days**. Search results may be incomplete during indexing. Opening the library still refreshes its directory listing to discover added and deleted comics. The refresh button forces a complete directory and metadata refresh regardless of cache age. Failed metadata requests preserve old values without extending their lifetime.
+
+Search covers all comic titles, directory names, authors and tags in the current library. Click an author or tag on a comic's details to apply an exact filter within that library; combine it with a keyword or clear the filter chip. Sort by title, author or remote modification time in either direction. Modification time comes from WebDAV folder properties, rather than the comic's publication date; missing values sort last.
+
+Pages contain 24 items by default, with 48 and 96 also available. Click the page indicator to jump. Comics and archives have separate tabs and pagination; archives support filename search and name/modification-time sorting, and retain download-and-import behavior. The cache is rebuildable and excluded from backup/sync. The app never reads the sync tool's private SQLite database.
 
 <!--anchor:cache-directory-->
 ## Comic cache directory

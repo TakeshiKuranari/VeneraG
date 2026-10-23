@@ -37,7 +37,7 @@ VeneraX is a free and open-source, multi-platform comic reader forked from Vener
 - [x] Quick WebDAV config sync across devices via QR code
 - [x] Long-press to reorder the home screen's function modules
 - [x] Multiple library management
-- [x] WebDAV comic library (experimental)
+- [x] WebDAV comic library (experimental): remote metadata, author/tag filters, library-wide search, sorting and pagination, with a 7-day metadata cache
 - [x] App lock adds PIN, password and pattern unlock
 - [x] AI page translation while reading (experimental): images and OCR stay on-device, and only recognized text is sent to an LLM you configure; beginner provider templates/model fetching plus advanced custom settings, resource-saving/balanced/fast presets, whole-chapter pre-translation, smart erase and bounded text layout
 - [x] Custom collections: read comics published as separate volumes or parts as one, across sources

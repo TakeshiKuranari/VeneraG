@@ -577,15 +577,29 @@ abstract mixin class _ComicPageActions {
 
   void onTapTag(String tag, String namespace) {
     final source = comicSource;
+    final library = WebdavLibraryStore.findBySourceKey(comic.sourceKey);
+    if (library != null) {
+      final author = const {
+        'author', 'authors', 'artist', 'artists', '作者', '画师',
+      }.contains(namespace.trim().toLowerCase());
+      App.mainNavigatorKey!.currentContext!.to(
+        () => WebdavLibraryPage(
+          libraryId: library.id,
+          initialFilter: WebdavFilter(
+            author ? WebdavFilterKind.author : WebdavFilterKind.tag,
+            tag,
+          ),
+        ),
+      );
+      return;
+    }
     var target = source?.handleClickTagEvent?.call(namespace, tag);
     var context = App.mainNavigatorKey!.currentContext!;
     if (target != null) {
       target.jump(context);
       return;
     }
-    // Collections and online libraries are native sources without a search
-    // implementation, so searching "within" them is meaningless. Send the tag to
-    // the aggregated search instead, which only queries sources that can search.
+    // Other sources without search fall back to searchable online sources.
     if (source?.searchPageData == null) {
       context.to(() => AggregatedSearchPage(keyword: tag));
       return;

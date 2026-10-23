@@ -1,5 +1,14 @@
 {
   "zh_CN": {
+    "Search titles, authors and tags": "搜索标题、作者和标签",
+    "Refresh library and metadata": "刷新作品库和元数据",
+    "Remote modification time": "远端修改时间",
+    "Indexing metadata: @done / @total. Results are incomplete.": "正在读取元数据：@done / @total，搜索结果尚未完整。",
+    "Could not refresh metadata for @count comics. Refresh to retry.": "@count 部作品的元数据刷新失败，请刷新重试。",
+    "@count results": "共 @count 项结果",
+    "@count per page": "每页 @count 项",
+    "Page @page / @pages": "第 @page / @pages 页",
+    "Go to page": "跳转到页码",
     "Current comic": "当前漫画",
     "This device": "本设备",
     "Inherited from this device": "继承本设备设置",
@@ -1463,6 +1472,15 @@
     "This removes every stored translation and rendered page of this comic. The original images are unaffected.": "将删除本漫画所有已存的翻译和嵌字页面，原图不受影响。"
   },
   "zh_TW": {
+    "Search titles, authors and tags": "搜尋標題、作者和標籤",
+    "Refresh library and metadata": "重新整理作品庫和中繼資料",
+    "Remote modification time": "遠端修改時間",
+    "Indexing metadata: @done / @total. Results are incomplete.": "正在讀取中繼資料：@done / @total，搜尋結果尚未完整。",
+    "Could not refresh metadata for @count comics. Refresh to retry.": "@count 部作品的中繼資料更新失敗，請重新整理以重試。",
+    "@count results": "共 @count 項結果",
+    "@count per page": "每頁 @count 項",
+    "Page @page / @pages": "第 @page / @pages 頁",
+    "Go to page": "跳至頁碼",
     "Current comic": "目前漫畫",
     "This device": "本裝置",
     "Inherited from this device": "沿用本裝置設定",

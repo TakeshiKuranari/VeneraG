@@ -4,8 +4,8 @@ import 'package:venera/network/webdav_library.dart';
 
 /// Builds the native (Dart, non-JS) [ComicSource] that exposes one configured
 /// WebDAV comic library. It wires only the read-side hooks the library needs
-/// (`loadComicInfo` / `loadComicPages` / image loading config); everything else
-/// is null, since there is no account, search, category or explore surface.
+/// (`loadComicInfo` / `loadComicPages` / image loading config). Library search
+/// and author/tag filters live in WebdavLibraryPage, outside global JS search.
 ///
 /// Being a real [ComicSource] means the reader, cover loader, detail page,
 /// history and favourites all treat a WebDAV comic like any other network

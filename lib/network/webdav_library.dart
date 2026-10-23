@@ -6,11 +6,18 @@ import 'package:venera/foundation/consts.dart';
 import 'package:venera/foundation/log.dart';
 import 'package:venera/foundation/res.dart';
 import 'package:venera/foundation/webdav_library_store.dart';
+import 'package:venera/foundation/webdav_library_index.dart';
+import 'package:venera/foundation/webdav_library_index_store.dart';
+import 'package:venera/foundation/webdav_library_models.dart';
+import 'package:venera/foundation/webdav_metadata.dart';
+import 'package:dio/dio.dart';
 import 'package:venera/network/app_dio_io.dart';
 import 'package:venera/utils/io.dart';
 import 'package:venera/utils/webdav_upload.dart';
 import 'package:webdav_client/webdav_client.dart' as webdav;
 import 'package:xml/xml.dart';
+
+export 'package:venera/foundation/webdav_library_models.dart';
 
 /// Path/name helpers shared by every WebDAV comic library. Pure functions with
 /// no configuration of their own, so they hold no notion of "the" library —
@@ -33,12 +40,11 @@ abstract class WebdavLibrary {
   /// online comics (the app already imports these locally).
   static const archiveExts = {'cbz', 'zip', '7z', 'cb7', 'cbr', 'rar'};
 
-  static String ensureDir(String p) => p.endsWith('/') ? p : '$p/';
+  static String ensureDir(String p) => ensureWebdavDirectory(p);
 
   /// Encodes a server-absolute directory path into an opaque comic id that
   /// round-trips through the reader/history without a lookup table.
-  static String encodeId(String path) =>
-      base64Url.encode(utf8.encode(ensureDir(path)));
+  static String encodeId(String path) => encodeWebdavComicId(path);
 
   static String decodeId(String id) {
     try {
@@ -82,20 +88,7 @@ abstract class WebdavLibrary {
 
   /// Natural-order comparison so `2.jpg` sorts before `10.jpg`.
   static int naturalCompare(String a, String b) {
-    final ra = RegExp(r'(\d+|\D+)').allMatches(a).map((m) => m[0]!).toList();
-    final rb = RegExp(r'(\d+|\D+)').allMatches(b).map((m) => m[0]!).toList();
-    for (var i = 0; i < ra.length && i < rb.length; i++) {
-      final sa = ra[i], sb = rb[i];
-      final na = int.tryParse(sa), nb = int.tryParse(sb);
-      int c;
-      if (na != null && nb != null) {
-        c = na.compareTo(nb);
-      } else {
-        c = sa.toLowerCase().compareTo(sb.toLowerCase());
-      }
-      if (c != 0) return c;
-    }
-    return ra.length.compareTo(rb.length);
+    return compareWebdavNames(a, b);
   }
 
   /// Directory listings and probes must be bounded: rhttp only enforces a
@@ -241,18 +234,36 @@ class WebdavLibraryClient {
         final path = f.path ?? '$target$name';
         if (f.isDir == true) {
           entries.add(
-            WebdavEntry.comic(name: name, path: WebdavLibrary.ensureDir(path)),
+            WebdavEntry.comic(
+              name: name,
+              path: WebdavLibrary.ensureDir(path),
+              modified: f.mTime,
+            ),
           );
         } else if (WebdavLibrary.isArchive(name)) {
           entries.add(
-            WebdavEntry.archive(name: name, path: path, size: f.size),
+            WebdavEntry.archive(
+              name: name,
+              path: path,
+              size: f.size,
+              modified: f.mTime,
+            ),
           );
         } else if (config.detectLinkedFolders) {
           linkedFolderCandidates.add((name: name, path: path));
         }
         // Loose images at the browse root are ignored: a comic is a folder.
       }
-      entries.addAll(await _probeLinkedFolders(client, linkedFolderCandidates));
+      final modifiedByName = {for (final file in files) file.name: file.mTime};
+      entries.addAll(
+        (await _probeLinkedFolders(client, linkedFolderCandidates)).map(
+          (entry) => WebdavEntry.comic(
+            name: entry.name,
+            path: entry.path,
+            modified: modifiedByName[entry.name],
+          ),
+        ),
+      );
       entries.sort((a, b) => WebdavLibrary.naturalCompare(a.name, b.name));
       return Res(entries);
     } catch (e, s) {
@@ -262,7 +273,9 @@ class WebdavLibraryClient {
   }
 
   /// Reads each parent once, even for comics with hundreds of chapters.
-  Future<Map<String, DateTime>> chapterModifiedTimes(Iterable<String> ids) async {
+  Future<Map<String, DateTime>> chapterModifiedTimes(
+    Iterable<String> ids,
+  ) async {
     final paths = {for (final id in ids) id: WebdavLibrary.ensureDir(id)};
     final parents = paths.values.map((path) {
       final chapter = path.substring(0, path.length - 1);
@@ -295,6 +308,7 @@ class WebdavLibraryClient {
     final dir = WebdavLibrary.decodeId(id);
     try {
       final client = _newClient();
+      final metadataFuture = _detailMetadata(dir);
       final files = await client.readDir(dir);
       final subDirs = <webdav.File>[];
       final images = <String>[];
@@ -312,7 +326,10 @@ class WebdavLibraryClient {
         }
       }
 
-      final title = WebdavLibrary.titleOf(dir);
+      final metadata = await metadataFuture;
+      final title = metadata?.title.isNotEmpty == true
+          ? metadata!.title
+          : WebdavLibrary.titleOf(dir);
       // `chapters` is either a flat {chapterPath: title} map or a grouped
       // {groupName: {chapterPath: title}} map (for 卷/话/番外 tabs). Passed as-is
       // to ComicDetails.fromJson, which builds ComicChapters.grouped from a
@@ -371,14 +388,51 @@ class WebdavLibraryClient {
         'cover': coverUrl,
         'comicId': id,
         'sourceKey': sourceKey,
-        'tags': <String, List<String>>{},
+        'tags': metadata?.detailTags ?? <String, List<String>>{},
         'chapters': chapters,
-        'description': '',
+        'description': metadata?.description ?? '',
       });
       return Res(details);
     } catch (e, s) {
       Log.error('WebdavLibrary', e, s);
       return Res.error(e.toString());
+    }
+  }
+
+  /// Direct GET: indexing must not enumerate a comic's chapters or cover.
+  /// Only a confirmed 404 means absent; other failures must not renew the TTL.
+  Future<WebdavMetadata?> readMetadata(String directory) async {
+    final client = _newClient();
+    // Client.read performs an OPTIONS preflight for every file. Use the
+    // authenticated request primitive directly so indexing needs one GET per
+    // comic, and a failed OPTIONS cannot be mistaken for missing metadata.
+    final response = await client.c.req<List<int>>(
+      client,
+      'GET',
+      '${WebdavLibrary.ensureDir(directory)}metadata.json',
+      optionsHandler: (options) => options.responseType = ResponseType.bytes,
+    );
+    if (response.statusCode == 404) return null;
+    if (response.statusCode != 200 || response.data == null) {
+      throw StateError('Metadata request failed (HTTP ${response.statusCode})');
+    }
+    return WebdavMetadata.parse(response.data!);
+  }
+
+  Future<WebdavMetadata?> _detailMetadata(String directory) async {
+    WebdavLibraryIndex? index;
+    try {
+      // Standalone clients (connection tests, injected transports) need no
+      // application store. Registered sources share the browse page's cache.
+      if (WebdavLibraryStore.find(config.id) != null) {
+        index = WebdavLibraryIndexes.acquire(config, reader: readMetadata);
+        return await index.metadata(directory);
+      }
+      return await readMetadata(directory);
+    } catch (_) {
+      return index?.snapshot[directory];
+    } finally {
+      index?.release();
     }
   }
 
@@ -691,33 +745,6 @@ class WebdavLibraryClient {
     }
     return false;
   }
-}
-
-/// A single browsable item: either a comic folder or an importable archive.
-class WebdavEntry {
-  final String name;
-  final String path;
-  final bool isArchiveFile;
-  final int? size;
-
-  const WebdavEntry._({
-    required this.name,
-    required this.path,
-    required this.isArchiveFile,
-    this.size,
-  });
-
-  factory WebdavEntry.comic({required String name, required String path}) =>
-      WebdavEntry._(name: name, path: path, isArchiveFile: false);
-
-  factory WebdavEntry.archive({
-    required String name,
-    required String path,
-    int? size,
-  }) => WebdavEntry._(name: name, path: path, isArchiveFile: true, size: size);
-
-  /// The opaque comic id used to open this folder as an online comic.
-  String get comicId => WebdavLibrary.encodeId(path);
 }
 
 extension _FirstWhereOrNull<E> on Iterable<E> {
