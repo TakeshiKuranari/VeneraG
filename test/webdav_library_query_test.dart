@@ -26,9 +26,9 @@ void main() {
     final result = const WebdavLibraryQuery(page: 2).apply(entries, metadata);
     expect(result.total, 60);
     expect(result.pages, 3);
-    expect(result.entries.length, 24);
-    expect(result.entries.first.path, '/library/25/');
-    expect(result.entries.last.path, '/library/48/');
+    expect(result.entries.length, 20);
+    expect(result.entries.first.path, '/library/21/');
+    expect(result.entries.last.path, '/library/40/');
   });
 
   test('searches metadata outside the first page and directory names', () {
@@ -114,7 +114,7 @@ void main() {
         page: -1,
         pageSize: 0,
       ).apply(entries, metadata).entries.length,
-      24,
+      20,
     );
   });
 

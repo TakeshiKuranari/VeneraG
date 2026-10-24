@@ -19,9 +19,11 @@ class WebdavLibraryQuery {
     this.sort = WebdavSort.title,
     this.descending = false,
     this.page = 1,
-    this.pageSize = 24,
+    this.pageSize = defaultPageSize,
     this.archives = false,
   });
+
+  static const defaultPageSize = 20;
 
   final String keyword;
   final WebdavFilter? filter;
@@ -81,7 +83,7 @@ class WebdavLibraryQuery {
       comparison = compareWebdavNames(title(a), title(b));
       return comparison != 0 ? comparison : a.path.compareTo(b.path);
     });
-    final size = pageSize > 0 ? pageSize : 24;
+    final size = pageSize > 0 ? pageSize : defaultPageSize;
     final pages = result.isEmpty ? 1 : (result.length / size).ceil();
     final current = page.clamp(1, pages);
     final start = (current - 1) * size;

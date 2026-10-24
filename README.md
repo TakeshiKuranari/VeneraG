@@ -50,9 +50,49 @@ VeneraX 是一个 Fork 自 Venera 并在原版基础上进行维护与增强，�
 <details>
 <summary><b>本地构建</b></summary>
 
-1. 安装 [Flutter](https://flutter.dev/docs/get-started/install)
-2. 克隆仓库，执行 `flutter pub get`
-3. 按平台构建：
+**1. 准备环境**
+
+| 组件 | 版本 | 说明 |
+| --- | --- | --- |
+| Flutter | 3.44.3 | `pubspec.yaml` 中锁定，低于该版本 `pub get` 会因 SDK 约束失败 |
+| Dart | 3.12.x | 随 Flutter 3.44.3 附带 |
+| JDK | 17 | 当前 AGP 不支持更高版本 |
+| Android SDK | 含 NDK `28.0.13004108` | 版本写死在 `android/app/build.gradle` 的 `ndkVersion` |
+| Rust | 1.85.1 | 由 `rust-toolchain.toml` 锁定，用于编译 `rhttp` |
+
+Rust 需要预装 Android 三个架构的 target：
+
+```bash
+rustup target add aarch64-linux-android armv7-linux-androideabi x86_64-linux-android
+```
+
+首次构建会自动安装 `rust-toolchain.toml` 指定的 1.85.1 工具链并编译 `rhttp`，耗时较长属正常现象。
+
+**2. 准备 Android 签名密钥**
+
+`android/app/build.gradle` 在配置阶段就要求 `android/key.properties` 存在，缺失会直接报 `Missing android/key.properties for release signing`。
+
+```bash
+keytool -genkey -v -keystore venera.jks -keyalg RSA -keysize 2048 -validity 10000 -alias venera
+```
+
+`android/key.properties`（已在 `.gitignore` 中，不会被提交）：
+
+```properties
+storeFile=/绝对路径/venera.jks
+storePassword=你的 keystore 密码
+keyAlias=venera
+keyPassword=你的 key 密码
+```
+
+**3. 拉取依赖**
+
+```bash
+git clone <本仓库> && cd VeneraG
+flutter pub get
+```
+
+**4. 按平台构建**
 
 ```bash
 flutter build apk        # Android
@@ -61,7 +101,48 @@ flutter build linux      # Linux
 flutter build macos      # macOS
 ```
 
-Android 需要先准备签名密钥，见下一节的「Android 签名」。
+**5. 只构建 arm64 的 Android 包**
+
+真机分发通常只需要 arm64，这条命令会跳过另外两个架构的编译，明显更快：
+
+```bash
+flutter build apk --release --no-pub \
+  --target-platform android-arm64 --split-per-abi
+# 或者直接
+python3 .buildlog/android/run.py build-release-arm64-only flutter build apk --release --no-pub --target-platform android-arm64 --split-per-abi
+```
+
+产物有两个，内容完全相同：
+
+| 路径 | 说明 |
+| --- | --- |
+| `build/app/outputs/apk/release/VeneraX-<版本>-arm64-v8a.apk` | Gradle 直接产出，带版本号，分发用这个 |
+| `build/app/outputs/flutter-apk/app-arm64-v8a-release.apk` | Flutter 额外复制的固定文件名副本 |
+
+文件名规则来自 `android/app/build.gradle` 的 `applicationVariants` 段；同时 versionCode 会按 ABI 追加偏移（`armeabi-v7a` 为 1、`arm64-v8a` 为 2、`x86_64` 为 3），例如 `2.3.6+249` 的 arm64 包实际 versionCode 是 `2492`。
+
+**6. 安装到真机**
+
+```bash
+adb devices
+adb install -r build/app/outputs/apk/release/VeneraX-2.3.6-arm64-v8a.apk
+# 或者直接
+/opt/homebrew/share/android-commandlinetools/platform-tools/adb install -r build/app/outputs/apk/release/VeneraX-2.3.6-arm64-v8a.apk
+```
+
+用自己生成的密钥签名的包与官方发布版签名不同，无法覆盖安装，需要先卸载旧版；卸载会清除应用数据，请先在应用内导出备份。
+
+**国内网络**
+
+拉取依赖慢时可以先设置镜像再构建：
+
+```bash
+export FLUTTER_STORAGE_BASE_URL=https://storage.flutter-io.cn
+export RUSTUP_DIST_SERVER=https://rsproxy.cn
+export RUSTUP_UPDATE_ROOT=https://rsproxy.cn/rustup
+```
+
+构建时 Flutter 会提示 Gradle 8.13.0、Kotlin 2.1.0 版本偏低，以及若干插件声明的 NDK 版本与项目不一致，这些都只是警告，不影响产物生成。
 
 </details>
 

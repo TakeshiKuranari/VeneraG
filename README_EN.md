@@ -51,9 +51,49 @@ Setup steps and interactions for each feature are documented in the **[guide](do
 <details>
 <summary><b>Local build</b></summary>
 
-1. Install [Flutter](https://flutter.dev/docs/get-started/install)
-2. Clone the repository and run `flutter pub get`
-3. Build for your platform:
+**1. Requirements**
+
+| Component | Version | Notes |
+| --- | --- | --- |
+| Flutter | 3.44.3 | Pinned in `pubspec.yaml`; older versions fail `pub get` on the SDK constraint |
+| Dart | 3.12.x | Bundled with Flutter 3.44.3 |
+| JDK | 17 | The current AGP does not support newer versions |
+| Android SDK | With NDK `28.0.13004108` | Pinned via `ndkVersion` in `android/app/build.gradle` |
+| Rust | 1.85.1 | Pinned by `rust-toolchain.toml`, used to build `rhttp` |
+
+Rust needs the three Android targets:
+
+```bash
+rustup target add aarch64-linux-android armv7-linux-androideabi x86_64-linux-android
+```
+
+The first build installs the 1.85.1 toolchain from `rust-toolchain.toml` and compiles `rhttp`, so it takes a while.
+
+**2. Prepare the Android signing key**
+
+`android/app/build.gradle` requires `android/key.properties` at configuration time and fails with `Missing android/key.properties for release signing` without it.
+
+```bash
+keytool -genkey -v -keystore venera.jks -keyalg RSA -keysize 2048 -validity 10000 -alias venera
+```
+
+`android/key.properties` (already in `.gitignore`, never committed):
+
+```properties
+storeFile=/absolute/path/to/venera.jks
+storePassword=your keystore password
+keyAlias=venera
+keyPassword=your key password
+```
+
+**3. Fetch dependencies**
+
+```bash
+git clone <this repo> && cd VeneraG
+flutter pub get
+```
+
+**4. Build for a platform**
 
 ```bash
 flutter build apk        # Android
@@ -62,7 +102,44 @@ flutter build linux      # Linux
 flutter build macos      # macOS
 ```
 
-Android needs a signing key first — see "Android signing" in the next section.
+**5. Build the arm64 Android APK only**
+
+Real devices usually need arm64 alone, and this skips compiling the other two ABIs:
+
+```bash
+flutter build apk --release --no-pub \
+  --target-platform android-arm64 --split-per-abi
+```
+
+Two identical files are produced:
+
+| Path | Notes |
+| --- | --- |
+| `build/app/outputs/apk/release/VeneraX-<version>-arm64-v8a.apk` | Written by Gradle, versioned — ship this one |
+| `build/app/outputs/flutter-apk/app-arm64-v8a-release.apk` | Fixed-name copy made by Flutter |
+
+The naming comes from the `applicationVariants` block in `android/app/build.gradle`; the versionCode also gets a per-ABI offset (`armeabi-v7a` 1, `arm64-v8a` 2, `x86_64` 3), so `2.3.6+249` yields arm64 versionCode `2492`.
+
+**6. Install on a device**
+
+```bash
+adb devices
+adb install -r build/app/outputs/apk/release/VeneraX-2.3.6-arm64-v8a.apk
+```
+
+An APK signed with your own key does not match the official release signature and cannot install over it — uninstall the old version first, which clears app data, so export a backup from the app beforehand.
+
+**Behind the GFW**
+
+If dependency downloads are slow, set mirrors before building:
+
+```bash
+export FLUTTER_STORAGE_BASE_URL=https://storage.flutter-io.cn
+export RUSTUP_DIST_SERVER=https://rsproxy.cn
+export RUSTUP_UPDATE_ROOT=https://rsproxy.cn/rustup
+```
+
+Flutter will warn that Gradle 8.13.0 and Kotlin 2.1.0 are below the recommended versions, and that some plugins declare a different NDK version. These are warnings only and do not block the build.
 
 </details>
 
